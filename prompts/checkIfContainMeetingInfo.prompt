@@ -1,0 +1,13 @@
+---
+model: ollama/llama3
+config:
+    temperature: 1
+input:
+    schema:
+        text: string
+    default:
+        text: null
+---
+Tell me if this is a message contain meeting or event information,
+it need to contain at least date and time, message: {{text}},
+return me result in boolean format true of false with lowercase.

@@ -1,4 +1,3 @@
-import {generate} from '@genkit-ai/ai';
 import {configureGenkit} from '@genkit-ai/core';
 import {defineFlow, startFlowsServer} from '@genkit-ai/flow';
 
@@ -6,12 +5,14 @@ import * as z from 'zod';
 import {ollama} from 'genkitx-ollama';
 import {geminiPro, googleAI} from "@genkit-ai/googleai";
 import "dotenv/config";
-import {ModelArgument} from "@genkit-ai/ai/lib/model";
+import {Dotprompt, dotprompt, prompt} from '@genkit-ai/dotprompt';
 
-const localModelName = process.env.LOCAL_MODEL_NAME || 'ollama/gemma'
 
-const localModel = `ollama/${localModelName}`
-const remoteModel = geminiPro
+const localModelName = `${process.env.LOCAL_MODEL_NAME}` || 'gemma'
+const localModelNameWithPrefix = `ollama/${localModelName}`
+const remoteModel = 'googleai/gemini-pro'
+
+const useModel = localModelNameWithPrefix;
 
 configureGenkit({
     plugins: [
@@ -27,18 +28,16 @@ configureGenkit({
         googleAI({
             apiKey: process.env.GOOGLE_GENAI_API_KEY,
         }),
+        dotprompt()
     ],
     logLevel: 'debug',
     enableTracingAndMetrics: true,
 });
 
-async function generateStaticResponse(text: string, model: ModelArgument): Promise<string> {
-    const rawRes = await generate({
-        prompt: text,
-        model: model,
-        config: {
-            temperature: 1,
-        },
+async function generateStaticResponse(prompt: Dotprompt, input: object, modelName: string): Promise<string> {
+    const rawRes = await prompt.generate({
+        model: modelName,
+        input: input,
     });
 
     return rawRes.text();
@@ -90,23 +89,35 @@ function cleanUpSlackMessage(text: string): string {
     return text.replace(/:\w+:/g, '');
 }
 
-async function getEventDetail(text: string, model: ModelArgument): Promise<Event> {
+async function getEventDetail(text: string, modelName: string): Promise<Event> {
+    const getEventDetailPrompt = await prompt('getEventDetail');
+
+    const input = {
+        text: text,
+    }
+
     const responseText = await generateStaticResponse(
-        `Give me a output of event detail from ${text},` +
-        "format will be a JSON, key and value can be determined by the model." +
-        "But at least must contain [eventName, time, date, location, location, content, needRegistration] these fields.",
-        model
+        getEventDetailPrompt,
+        input,
+        modelName
     );
     const response = modelOutPutToJSON<Event>(responseText);
 
     return response;
 }
 
-async function checkIfContainMeetingInfo(text: string, model: ModelArgument): Promise<boolean> {
-    const template = `Tell me if this is a message contain meeting or event information,
-        it need to contain at least date and time, message: '${text}', 
-        return me result in boolean format true of false with lowercase.`;
-    const response = await generateStaticResponse(template, model);
+async function checkIfContainMeetingInfo(text: string, modelName: string): Promise<boolean> {
+    const checkIfContainMeetingInfoPrompt = await prompt('checkIfContainMeetingInfo');
+
+    const input = {
+        text: text,
+    }
+
+    const response = await generateStaticResponse(
+        checkIfContainMeetingInfoPrompt,
+        input,
+        modelName
+    );
     const isContainMeetingInfo = response.toLowerCase().trim() === "true";
 
     return isContainMeetingInfo;
@@ -119,9 +130,9 @@ export const addCalendarEventFlow = defineFlow({
     },
     async (input: string) => {
         const cleanUpInput = cleanUpSlackMessage(input);
-        const isContainMeetingInfo = await checkIfContainMeetingInfo(cleanUpInput, localModel);
+        const isContainMeetingInfo = await checkIfContainMeetingInfo(cleanUpInput, useModel);
         if (isContainMeetingInfo) {
-            const eventDetail = await getEventDetail(cleanUpInput, localModel);
+            const eventDetail = await getEventDetail(cleanUpInput, useModel);
             return `Add calendar event ${JsonObjectToString(eventDetail)}`;
         }
 

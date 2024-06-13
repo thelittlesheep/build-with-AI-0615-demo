@@ -1,0 +1,13 @@
+---
+model: ollama/llama3
+config:
+    temperature: 1
+input:
+    schema:
+        text: string
+    default:
+        text: null
+---
+Give me a output of event detail from {{text}},
+format will be a JSON, key and value can be determined by the model.
+But must contain [eventName, time, date, location, location, content, needRegistration] these fields.
