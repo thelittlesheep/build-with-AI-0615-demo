@@ -6,13 +6,17 @@ import {ollama} from 'genkitx-ollama';
 import {geminiPro, googleAI} from "@genkit-ai/googleai";
 import "dotenv/config";
 import {Dotprompt, dotprompt, prompt} from '@genkit-ai/dotprompt';
+import {startSlackBoltServer} from "./slackBotServer";
 
+(async () => {
+    await startSlackBoltServer();
+})();
 
 const localModelName = `${process.env.LOCAL_MODEL_NAME}` || 'gemma'
-const localModelNameWithPrefix = `ollama/${localModelName}`
-const remoteModel = 'googleai/gemini-pro'
+const remoteModelName = 'googleai/gemini-pro'
 
-const useModel = localModelNameWithPrefix;
+const localModelForPrompt = `ollama/${localModelName}`;
+const remoteModelForPrompt = remoteModelName;
 
 configureGenkit({
     plugins: [
@@ -56,7 +60,7 @@ function formatJsonString(modelOutput: string): string {
     return modelOutput.replace(/\\n/g, '').replace(/\\"/g, '"');
 }
 
-function JsonObjectToString(obj: any): string {
+export function JsonObjectToString(obj: any): string {
     return formatJsonString(JSON.stringify(obj, null, 2));
 }
 
@@ -126,17 +130,40 @@ async function checkIfContainMeetingInfo(text: string, modelName: string): Promi
 export const addCalendarEventFlow = defineFlow({
         name: 'addCalendarEvent',
         inputSchema: z.string(),
-        outputSchema: z.string(),
+        outputSchema: z.object({
+            isContainMeetingInfo: z.boolean(),
+            eventDetail: z.object({
+                eventName: z.string(),
+                time: z.string(),
+                date: z.string(),
+                location: z.string(),
+                content: z.string(),
+                needRegistration: z.boolean(),
+            }),
+        })
     },
     async (input: string) => {
         const cleanUpInput = cleanUpSlackMessage(input);
-        const isContainMeetingInfo = await checkIfContainMeetingInfo(cleanUpInput, useModel);
+        const isContainMeetingInfo = await checkIfContainMeetingInfo(cleanUpInput, localModelForPrompt);
         if (isContainMeetingInfo) {
-            const eventDetail = await getEventDetail(cleanUpInput, useModel);
-            return `Add calendar event ${JsonObjectToString(eventDetail)}`;
+            const eventDetail = await getEventDetail(cleanUpInput, localModelForPrompt);
+            return {
+                isContainMeetingInfo: isContainMeetingInfo,
+                eventDetail: eventDetail,
+            };
         }
 
-        return 'No meeting information found.';
+        return {
+            isContainMeetingInfo: isContainMeetingInfo,
+            eventDetail: {
+                eventName: '',
+                time: '',
+                date: '',
+                location: '',
+                content: '',
+                needRegistration: false,
+            },
+        };
     }
 )
 

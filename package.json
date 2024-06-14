@@ -18,6 +18,7 @@
     "@genkit-ai/dotprompt": "^0.5.2",
     "@genkit-ai/flow": "^0.5.2",
     "@genkit-ai/googleai": "^0.5.2",
+    "@slack/bolt": "^3.18.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "genkitx-ollama": "^0.5.2",
